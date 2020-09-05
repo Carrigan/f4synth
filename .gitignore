@@ -1,0 +1,8 @@
+**/*.rs.bk
+.#*
+.gdb_history
+Cargo.lock
+target/
+
+vendor
+.vscode/.cortex-debug.*
