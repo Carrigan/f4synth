@@ -14,8 +14,9 @@ panic-halt = "0.2.0"
 
 # Uncomment for the device example.
 [dependencies.stm32f4xx-hal]
+git = "https://github.com/stm32-rs/stm32f4xx-hal"
+branch = "master"
 features = ["rt", "stm32f407"]
-version = "0.8"
 
 # this lets you use `cargo fix`!
 [[bin]]
