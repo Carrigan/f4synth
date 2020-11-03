@@ -12,6 +12,37 @@ use stm32f4xx_hal::{ i2c };
 use stm32f4xx_hal::time::Hertz;
 
 mod i2s;
+mod waves;
+use waves::{ SquareWaveGenerator, SawtoothWaveGenerator, WaveGenerator };
+
+enum WaveGenerable <'a> {
+    Square(SquareWaveGenerator),
+    Sawtooth(SawtoothWaveGenerator),
+    Noise(&'a mut HardwareWhiteNoiseGenerator)
+}
+
+impl <'a> WaveGenerator for WaveGenerable<'a> {
+    fn next(&mut self) -> u16 {
+        match self {
+            WaveGenerable::Square(square) => square.next(),
+            WaveGenerable::Sawtooth(sawtooth) => sawtooth.next(),
+            WaveGenerable::Noise(noise) => noise.next()
+        }
+    }
+}
+
+struct HardwareWhiteNoiseGenerator {
+    random_generator: stm32f4xx_hal::rng::Rng
+}
+
+impl WaveGenerator for HardwareWhiteNoiseGenerator {
+    fn next(&mut self) -> u16 {
+        let mut values: [u8; 2] = [0; 2];
+        let _ = self.random_generator.read(&mut values);
+        ((values[0] as u16) << 8) + values[1] as u16
+    }
+}
+
 
 #[entry]
 fn main() -> ! {
@@ -30,10 +61,12 @@ fn main() -> ! {
         .freeze();
 
     // Setup i2s clock
+    // 2MHZ Vco
+    // * 258 / 6 = 86 MHZ
     unsafe { &*RCC::ptr() }.plli2scfgr.write(|w| unsafe {
         w
             .plli2sn().bits(258)
-            .plli2sr().bits(3)
+            .plli2sr().bits(6)
     });
 
     unsafe { &*RCC::ptr() }.cr.write(|w| w.plli2son().set_bit());
@@ -81,6 +114,8 @@ fn main() -> ! {
 
     assert!(cs43l22_id == Some(0xE3));
 
+    config_i2c.write(address, &[0x02, 0x01]).unwrap();
+
     // Commence the boot sequence
     config_i2c.write(address, &[0x00, 0x99]).unwrap();
     config_i2c.write(address, &[0x47, 0x80]).unwrap();
@@ -91,31 +126,45 @@ fn main() -> ! {
     // Set to headphones
     config_i2c.write(address, &[0x04, 0xAF]).unwrap();
 
-    // BASS
-    config_i2c.write(address, &[0x1F, 0xF0]);
-
-    // Set volume max
-    config_i2c.write(address, &[0x20, 0x90]).unwrap();
-    config_i2c.write(address, &[0x21, 0x90]).unwrap();
-    // config_i2c.write(address, &[0x22, 0]).unwrap();
-    // config_i2c.write(address, &[0x23, 0]).unwrap();
-
     // Set the power control high
     config_i2c.write(address, &[0x02, 0x9E]).unwrap();
 
-    let mut rando = periph.RNG.constrain(clocks);
+    // Set volume
+    config_i2c.write(address, &[0x20, 0xB0]).unwrap();
+    config_i2c.write(address, &[0x21, 0xB0]).unwrap();
+    config_i2c.write(address, &[0x1a, 0]).unwrap();
+    config_i2c.write(address, &[0x1b, 0]).unwrap();
 
-    loop { 
-        let mut values: [u8; 2] = [0; 2];
-        let rand_val = rando.read(&mut values);
-        let s: u16 = ((values[0] as u16) << 8) + values[1] as u16;
-        i2s_periph.try_write(&[s], &[s]);
+
+    let mut time = 0;
+    let rng = periph.RNG.constrain(clocks);
+    let mut hardware_noise_generator = HardwareWhiteNoiseGenerator { random_generator: rng };
+    let mut wave_generator = WaveGenerable::Square(
+        SquareWaveGenerator::new(48000, 440)
+    );
+
+    loop {
+        let next_sample = wave_generator.next();
+        let _ = i2s_periph.try_write(&[next_sample], &[next_sample]);
+
+        time += 1;
+        
+        if time == 48000 {
+            wave_generator = WaveGenerable::Square(
+                SquareWaveGenerator::new(48000, 880)
+            );
+        }
+
+        if time == 48000 * 2 {
+            wave_generator = WaveGenerable::Sawtooth(
+                SawtoothWaveGenerator::new(48000, 440)
+            );
+        }
+
+        if time == 48000 * 3 {
+            wave_generator = WaveGenerable::Noise(&mut hardware_noise_generator);
+
+            time = 0;
+        }
     }
-
-    // let mut s = 0;
-    // loop {
-    //     if s >= 65000 { s = 0 };
-    //     s += 500;
-    //     i2s_periph.try_write(&[s], &[s]);
-    // }
 }

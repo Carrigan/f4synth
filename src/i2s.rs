@@ -76,7 +76,9 @@ where
         // NOTE: Unsafe because the division can be set incorrectly.
         self.spi
             .i2spr
-            .write(|w| unsafe { w.i2sdiv().bits(13).odd().odd().mckoe().enabled() });
+            .write(|w| unsafe { 
+                w.i2sdiv().bits(3).odd().odd().mckoe().enabled() 
+            });
 
         // Configure I2S.
         // TODO: Configurable I2S standard and data length from user input.
