@@ -13,12 +13,16 @@ use stm32f4xx_hal::time::Hertz;
 
 mod i2s;
 mod waves;
+mod melody;
+
+use melody::{Melody, Note, Pitch};
 use waves::{ SquareWaveGenerator, SawtoothWaveGenerator, WaveGenerator };
 
 enum WaveGenerable <'a> {
     Square(SquareWaveGenerator),
     Sawtooth(SawtoothWaveGenerator),
-    Noise(&'a mut HardwareWhiteNoiseGenerator)
+    Noise(&'a mut HardwareWhiteNoiseGenerator),
+    Silence
 }
 
 impl <'a> WaveGenerator for WaveGenerable<'a> {
@@ -26,7 +30,8 @@ impl <'a> WaveGenerator for WaveGenerable<'a> {
         match self {
             WaveGenerable::Square(square) => square.next(),
             WaveGenerable::Sawtooth(sawtooth) => sawtooth.next(),
-            WaveGenerable::Noise(noise) => noise.next()
+            WaveGenerable::Noise(noise) => noise.next(),
+            WaveGenerable::Silence => (core::u16::MAX / 2)
         }
     }
 }
@@ -130,41 +135,58 @@ fn main() -> ! {
     config_i2c.write(address, &[0x02, 0x9E]).unwrap();
 
     // Set volume
-    config_i2c.write(address, &[0x20, 0xB0]).unwrap();
-    config_i2c.write(address, &[0x21, 0xB0]).unwrap();
+    config_i2c.write(address, &[0x20, 0x90]).unwrap();
+    config_i2c.write(address, &[0x21, 0x90]).unwrap();
     config_i2c.write(address, &[0x1a, 0]).unwrap();
     config_i2c.write(address, &[0x1b, 0]).unwrap();
+
+    //config_i2c.write(address, &[0x05, 0x20]).unwrap();
 
 
     let mut time = 0;
     let rng = periph.RNG.constrain(clocks);
     let mut hardware_noise_generator = HardwareWhiteNoiseGenerator { random_generator: rng };
-    let mut wave_generator = WaveGenerable::Square(
-        SquareWaveGenerator::new(48000, 440)
+    let mut wave_generators = (
+        WaveGenerable::Square(SquareWaveGenerator::new(48000, 440)),
+        WaveGenerable::Square(SquareWaveGenerator::new(48000, 440))
     );
 
+    let notes = [
+        Note::Eighth(Pitch::A4),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::C5),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::B4),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::C5),
+        Note::Eighth(Pitch::E5),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::A4),
+        Note::Eighth(Pitch::C5),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::B4),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::C5),
+        Note::Eighth(Pitch::A3)
+    ];
+
+    let mut melody = Melody::new(&notes, 194);
+
     loop {
-        let next_sample = wave_generator.next();
-        let _ = i2s_periph.try_write(&[next_sample], &[next_sample]);
+        wave_generators = match melody.next_sample() {
+            (true, Some(pitch)) => {
+                let pitchf32: f32 = pitch.into();
+                let sawtooth_gen = SawtoothWaveGenerator::new(48000, pitchf32 as usize);
+                let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
+                
+                (WaveGenerable::Square(square_gen), WaveGenerable::Sawtooth(sawtooth_gen))
+            },
+            (true, None) => (WaveGenerable::Silence, WaveGenerable::Silence),
+            _ => wave_generators
+        };
 
-        time += 1;
-        
-        if time == 48000 {
-            wave_generator = WaveGenerable::Square(
-                SquareWaveGenerator::new(48000, 880)
-            );
-        }
-
-        if time == 48000 * 2 {
-            wave_generator = WaveGenerable::Sawtooth(
-                SawtoothWaveGenerator::new(48000, 440)
-            );
-        }
-
-        if time == 48000 * 3 {
-            wave_generator = WaveGenerable::Noise(&mut hardware_noise_generator);
-
-            time = 0;
-        }
+        let l_sample = wave_generators.0.next();
+        let r_sample = wave_generators.1.next();
+        let _ = i2s_periph.try_write(&[l_sample], &[r_sample]);
     }
 }
