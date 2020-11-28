@@ -8,16 +8,16 @@ use cortex_m_rt::entry;
 
 use stm32f4xx_hal::stm32::{Peripherals, RCC};
 use stm32f4xx_hal::prelude::*;
-use stm32f4xx_hal::{ i2c, dma::{Transfer, config::DmaConfig} };
+use stm32f4xx_hal::{ i2c };
 use stm32f4xx_hal::time::Hertz;
 
-mod i2s;
 mod waves;
 mod melody;
 
 use melody::{Melody, Note, Pitch};
 use waves::{ SquareWaveGenerator, SawtoothWaveGenerator, WaveGenerator };
 
+#[allow(dead_code)]
 enum WaveGenerable <'a> {
     Square(SquareWaveGenerator),
     Sawtooth(SawtoothWaveGenerator),
@@ -48,7 +48,45 @@ impl WaveGenerator for HardwareWhiteNoiseGenerator {
     }
 }
 
-static mut DMA_BUFFER: [u16; 64] = [0; 64];
+const BUFFER_SIZE: usize = 64;
+static mut DMA_BUFFER: [u16; BUFFER_SIZE] = [0; BUFFER_SIZE];
+
+enum BufferHalf {
+    FirstHalf,
+    SecondHalf
+}
+
+fn generate_samples<'a>(buffer_half: BufferHalf, count: usize, wave_generator: WaveGenerable<'a>, melody: &mut Melody) -> WaveGenerable<'a> {
+    let mut generable= wave_generator;
+    
+    for index in 0..count {
+        generable = match melody.next_sample() {
+            (true, Some(pitch)) => {
+                let pitchf32: f32 = pitch.into();
+                let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
+                
+                WaveGenerable::Square(square_gen)
+            },
+            (true, None) => WaveGenerable::Silence,
+            _ => generable
+        };
+
+        let sample = generable.next();
+
+        let shifted_index = match buffer_half {
+            BufferHalf::FirstHalf => index * 2,
+            BufferHalf::SecondHalf => index * 2 + (BUFFER_SIZE / 2)
+        };
+
+        unsafe { 
+            DMA_BUFFER[shifted_index] = sample; 
+            DMA_BUFFER[shifted_index + 1] = sample;
+        };   
+    }
+
+    generable
+}
+
 
 #[entry]
 fn main() -> ! {
@@ -104,13 +142,35 @@ fn main() -> ! {
 
     // Set up I2S3.
     let _mck = gpioc.pc7.into_alternate_af6();
-    let ck = gpioc.pc10.into_alternate_af6();
-    let ws = gpioa.pa4.into_alternate_af6();
-    let sd = gpioc.pc12.into_alternate_af6();
+    let _ck = gpioc.pc10.into_alternate_af6();
+    let _ws = gpioa.pa4.into_alternate_af6();
+    let _sd = gpioc.pc12.into_alternate_af6();
 
-    let _i2s_periph = 
-        i2s::I2s { spi: periph.SPI3, pins: (ck, ws, sd, i2s::NoSdExt) }
-        .init(48000.hz(), 48000.hz());
+    // disable SS output
+    let spi3 = periph.SPI3;
+    spi3.cr2.write(|w| 
+        w
+            .ssoe().clear_bit()
+            .txdmaen().enabled()
+    );
+
+    spi3.i2spr.write(|w| unsafe { 
+        w
+            .i2sdiv().bits(3)
+            .odd().odd()
+            .mckoe().enabled() 
+    });
+
+    spi3.i2scfgr.write(|w| {
+        w
+            .i2smod().i2smode()
+            .i2sstd().philips()
+            .datlen().sixteen_bit()
+            .chlen().sixteen_bit()
+            .ckpol().idle_high()
+            .i2scfg().master_tx()
+            .i2se().enabled()
+    });
 
     // Set up the DMA
     let dma1 = periph.DMA1;
@@ -187,85 +247,26 @@ fn main() -> ! {
 
     let mut melody = Melody::new(&notes, 194);
 
-    // Fill the buffer
-    for index in 0..16 {
-        wave_generator = match melody.next_sample() {
-            (true, Some(pitch)) => {
-                let pitchf32: f32 = pitch.into();
-                let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
-                
-                WaveGenerable::Square(square_gen)
-            },
-            (true, None) => WaveGenerable::Silence,
-            _ => wave_generator
-        };
+    // Fill the buffer initially and start the DMA
+    wave_generator = generate_samples(BufferHalf::FirstHalf, BUFFER_SIZE / 4, wave_generator, &mut melody);
 
-        let sample = wave_generator.next();
-
-        let shifted_index = index * 2;
-        unsafe { 
-            DMA_BUFFER[shifted_index] = sample; 
-            DMA_BUFFER[shifted_index + 1] = sample;
-        };
-        
-    }
-
-    // Start the DMA
     spi_stream.ndtr.write(|w| unsafe { w.bits(64) });
     spi_stream.par.write(|w| w.pa().bits(0x40003C00 + 0xC));
     spi_stream.m0ar.write(|w| unsafe { w.m0a().bits(DMA_BUFFER.as_ptr() as usize as u32) });        
-    spi_stream.cr.modify(|r, w| w.en().enabled());
+    spi_stream.cr.modify(|_r, w| w.en().enabled());
 
     loop {
-        // Fill the second half
-        for index in 0..16 {
-            wave_generator = match melody.next_sample() {
-                (true, Some(pitch)) => {
-                    let pitchf32: f32 = pitch.into();
-                    let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
-                    
-                    WaveGenerable::Square(square_gen)
-                },
-                (true, None) => WaveGenerable::Silence,
-                _ => wave_generator
-            };
-    
-            let sample = wave_generator.next();
-
-            let shifted_index = 32 + index * 2;
-            unsafe { 
-                DMA_BUFFER[shifted_index] = sample; 
-                DMA_BUFFER[shifted_index + 1] = sample;
-            };
-        }
+        // Fill the second half while the first half runs
+        wave_generator = generate_samples(BufferHalf::SecondHalf, BUFFER_SIZE / 4, wave_generator, &mut melody);
 
         // Wait for it to half-complete
         while dma1.hisr.read().htif5().bit_is_clear() {}
 
-        // Clear the flag
+        // Clear the half-flag
         dma1.hifcr.write(|w| w.chtif5().set_bit());
 
-        // Fill the first half
-        for index in 0..16 {
-            wave_generator = match melody.next_sample() {
-                (true, Some(pitch)) => {
-                    let pitchf32: f32 = pitch.into();
-                    let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
-                    
-                    WaveGenerable::Square(square_gen)
-                },
-                (true, None) => WaveGenerable::Silence,
-                _ => wave_generator
-            };
-    
-            let sample = wave_generator.next();
-
-            let shifted_index = index * 2;
-            unsafe { 
-                DMA_BUFFER[shifted_index] = sample; 
-                DMA_BUFFER[shifted_index + 1] = sample;
-            };
-        }
+        // Fill the first half while the second half runs
+        wave_generator = generate_samples(BufferHalf::FirstHalf, BUFFER_SIZE / 4, wave_generator, &mut melody);
 
         // Wait for full-complete
         while dma1.hisr.read().tcif5().bit_is_clear() {}
