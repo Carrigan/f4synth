@@ -48,7 +48,7 @@ impl WaveGenerator for HardwareWhiteNoiseGenerator {
     }
 }
 
-static mut DMA_BUFFER: [u16; 2000] = [0; 2000];
+static mut DMA_BUFFER: [u16; 64] = [0; 64];
 
 #[entry]
 fn main() -> ! {
@@ -125,6 +125,8 @@ fn main() -> ! {
             .pinc().fixed()
             .dir().memory_to_peripheral()
             .pfctrl().dma()
+            .pl().high()
+            .circ().enabled()
     );
 
     // Turn on the chip
@@ -185,9 +187,66 @@ fn main() -> ! {
 
     let mut melody = Melody::new(&notes, 194);
 
+    // Fill the buffer
+    for index in 0..16 {
+        wave_generator = match melody.next_sample() {
+            (true, Some(pitch)) => {
+                let pitchf32: f32 = pitch.into();
+                let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
+                
+                WaveGenerable::Square(square_gen)
+            },
+            (true, None) => WaveGenerable::Silence,
+            _ => wave_generator
+        };
+
+        let sample = wave_generator.next();
+
+        let shifted_index = index * 2;
+        unsafe { 
+            DMA_BUFFER[shifted_index] = sample; 
+            DMA_BUFFER[shifted_index + 1] = sample;
+        };
+        
+    }
+
+    // Start the DMA
+    spi_stream.ndtr.write(|w| unsafe { w.bits(64) });
+    spi_stream.par.write(|w| w.pa().bits(0x40003C00 + 0xC));
+    spi_stream.m0ar.write(|w| unsafe { w.m0a().bits(DMA_BUFFER.as_ptr() as usize as u32) });        
+    spi_stream.cr.modify(|r, w| w.en().enabled());
+
     loop {
-        // Fill the buffer
-        for index in 0..1000 {
+        // Fill the second half
+        for index in 0..16 {
+            wave_generator = match melody.next_sample() {
+                (true, Some(pitch)) => {
+                    let pitchf32: f32 = pitch.into();
+                    let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
+                    
+                    WaveGenerable::Square(square_gen)
+                },
+                (true, None) => WaveGenerable::Silence,
+                _ => wave_generator
+            };
+    
+            let sample = wave_generator.next();
+
+            let shifted_index = 32 + index * 2;
+            unsafe { 
+                DMA_BUFFER[shifted_index] = sample; 
+                DMA_BUFFER[shifted_index + 1] = sample;
+            };
+        }
+
+        // Wait for it to half-complete
+        while dma1.hisr.read().htif5().bit_is_clear() {}
+
+        // Clear the flag
+        dma1.hifcr.write(|w| w.chtif5().set_bit());
+
+        // Fill the first half
+        for index in 0..16 {
             wave_generator = match melody.next_sample() {
                 (true, Some(pitch)) => {
                     let pitchf32: f32 = pitch.into();
@@ -206,16 +265,9 @@ fn main() -> ! {
                 DMA_BUFFER[shifted_index] = sample; 
                 DMA_BUFFER[shifted_index + 1] = sample;
             };
-            
         }
 
-        // Start the DMA
-        spi_stream.ndtr.write(|w| unsafe { w.bits(2000) });
-        spi_stream.par.write(|w| w.pa().bits(0x40003C00 + 0xC));
-        spi_stream.m0ar.write(|w| unsafe { w.m0a().bits(DMA_BUFFER.as_ptr() as usize as u32) });        
-        spi_stream.cr.modify(|r, w| w.en().enabled());
-
-        // Wait for it to complete
+        // Wait for full-complete
         while dma1.hisr.read().tcif5().bit_is_clear() {}
 
         // Clear the flag
