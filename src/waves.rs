@@ -51,3 +51,35 @@ impl WaveGenerator for SawtoothWaveGenerator {
         self.current_position
     }
 }
+
+#[allow(dead_code)]
+pub enum WaveGenerable <'a> {
+    Square(SquareWaveGenerator),
+    Sawtooth(SawtoothWaveGenerator),
+    Noise(&'a mut HardwareWhiteNoiseGenerator),
+    Silence
+}
+
+impl <'a> WaveGenerator for WaveGenerable<'a> {
+    fn next(&mut self) -> u16 {
+        match self {
+            WaveGenerable::Square(square) => square.next(),
+            WaveGenerable::Sawtooth(sawtooth) => sawtooth.next(),
+            WaveGenerable::Noise(noise) => noise.next(),
+            WaveGenerable::Silence => (core::u16::MAX / 2)
+        }
+    }
+}
+
+use stm32f4xx_hal::prelude::*;
+pub struct HardwareWhiteNoiseGenerator {
+    random_generator: stm32f4xx_hal::rng::Rng
+}
+
+impl WaveGenerator for HardwareWhiteNoiseGenerator {
+    fn next(&mut self) -> u16 {
+        let mut values: [u8; 2] = [0; 2];
+        let _ = self.random_generator.read(&mut values);
+        ((values[0] as u16) << 8) + values[1] as u16
+    }
+}
