@@ -9,7 +9,6 @@ use cortex_m_rt::entry;
 use stm32f4xx_hal::stm32::{Peripherals, RCC};
 use stm32f4xx_hal::prelude::*;
 use stm32f4xx_hal::{ i2c };
-use stm32f4xx_hal::time::Hertz;
 
 mod waves;
 mod melody;

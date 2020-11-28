@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 const NOTE_FREQUENCIES: [f32; 25] = [
     220.0, 
     233.08188075904496, 
@@ -86,7 +88,7 @@ impl Note {
 
 impl Into<Option<Pitch>> for Note {
     fn into(self) -> Option<Pitch> {
-        match(self) {
+        match self {
             Note::Eighth(pitch) => Some(pitch),
             Note::Quarter(pitch) => Some(pitch),
             Note::Half(pitch) => Some(pitch),
@@ -103,7 +105,6 @@ enum MelodyEvent {
 
 pub struct Melody<'a> {
     notes: &'a [Note],
-    tempo: u8,
     current_sample: u32,
     current_note: u32,
 
@@ -120,7 +121,6 @@ impl <'a> Melody<'a> {
 
         Self { 
             notes, 
-            tempo, 
             on_spacing,
             off_spacing,
             current_sample: 0, 
@@ -130,7 +130,7 @@ impl <'a> Melody<'a> {
     }
 
     pub fn next_sample(&mut self) -> (bool, Option<Pitch>) {
-        let next_timing = match(self.next_event) {
+        let next_timing = match self.next_event {
             MelodyEvent::NoteStart(t) => t,
             MelodyEvent::NoteStop(t) => t
         };
@@ -143,7 +143,7 @@ impl <'a> Melody<'a> {
         let note = self.notes[self.current_note as usize];
 
         match self.next_event {
-            MelodyEvent::NoteStart(t) => {
+            MelodyEvent::NoteStart(_t) => {
                 self.next_event = MelodyEvent::NoteStop(self.current_sample + (self.on_spacing * note.duration() as u32));
                 (true, note.into())
             },

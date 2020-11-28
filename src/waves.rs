@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 
 pub trait WaveGenerator {
     fn next(&mut self) -> u16;
