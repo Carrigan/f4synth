@@ -8,7 +8,7 @@ use cortex_m_rt::entry;
 
 use stm32f4xx_hal::stm32::{Peripherals, RCC};
 use stm32f4xx_hal::prelude::*;
-use stm32f4xx_hal::{ i2c };
+use stm32f4xx_hal::{ i2c, dma::{Transfer, config::DmaConfig} };
 use stm32f4xx_hal::time::Hertz;
 
 mod i2s;
@@ -48,6 +48,7 @@ impl WaveGenerator for HardwareWhiteNoiseGenerator {
     }
 }
 
+static mut DMA_BUFFER: [u16; 2000] = [0; 2000];
 
 #[entry]
 fn main() -> ! {
@@ -59,6 +60,9 @@ fn main() -> ! {
 
     // Enable I2S3
     rcc.apb1enr.modify(|_, w| w.spi3en().set_bit());
+
+    // Enable both DMAs
+    rcc.ahb1enr.modify(|_, w| w.dma1en().set_bit());
     
     let clocks = rcc.constrain().cfgr
         .use_hse(8.mhz())
@@ -104,9 +108,24 @@ fn main() -> ! {
     let ws = gpioa.pa4.into_alternate_af6();
     let sd = gpioc.pc12.into_alternate_af6();
 
-    let mut i2s_periph = 
+    let _i2s_periph = 
         i2s::I2s { spi: periph.SPI3, pins: (ck, ws, sd, i2s::NoSdExt) }
         .init(48000.hz(), 48000.hz());
+
+    // Set up the DMA
+    let dma1 = periph.DMA1;
+    let spi_stream = &dma1.st[5];
+
+    spi_stream.cr.write(|w| 
+        w
+            .chsel().bits(0)
+            .psize().bits16()
+            .msize().bits16()
+            .minc().incremented()
+            .pinc().fixed()
+            .dir().memory_to_peripheral()
+            .pfctrl().dma()
+    );
 
     // Turn on the chip
     let _ = reset_line.set_high();
@@ -142,14 +161,8 @@ fn main() -> ! {
 
     //config_i2c.write(address, &[0x05, 0x20]).unwrap();
 
-
-    let mut time = 0;
-    let rng = periph.RNG.constrain(clocks);
-    let mut hardware_noise_generator = HardwareWhiteNoiseGenerator { random_generator: rng };
-    let mut wave_generators = (
-        WaveGenerable::Square(SquareWaveGenerator::new(48000, 440)),
-        WaveGenerable::Square(SquareWaveGenerator::new(48000, 440))
-    );
+    let _rng = periph.RNG.constrain(clocks);
+    let mut wave_generator = WaveGenerable::Square(SquareWaveGenerator::new(48000, 440));
 
     let notes = [
         Note::Eighth(Pitch::A4),
@@ -173,20 +186,39 @@ fn main() -> ! {
     let mut melody = Melody::new(&notes, 194);
 
     loop {
-        wave_generators = match melody.next_sample() {
-            (true, Some(pitch)) => {
-                let pitchf32: f32 = pitch.into();
-                let sawtooth_gen = SawtoothWaveGenerator::new(48000, pitchf32 as usize);
-                let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
-                
-                (WaveGenerable::Square(square_gen), WaveGenerable::Sawtooth(sawtooth_gen))
-            },
-            (true, None) => (WaveGenerable::Silence, WaveGenerable::Silence),
-            _ => wave_generators
-        };
+        // Fill the buffer
+        for index in 0..1000 {
+            wave_generator = match melody.next_sample() {
+                (true, Some(pitch)) => {
+                    let pitchf32: f32 = pitch.into();
+                    let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
+                    
+                    WaveGenerable::Square(square_gen)
+                },
+                (true, None) => WaveGenerable::Silence,
+                _ => wave_generator
+            };
+    
+            let sample = wave_generator.next();
 
-        let l_sample = wave_generators.0.next();
-        let r_sample = wave_generators.1.next();
-        let _ = i2s_periph.try_write(&[l_sample], &[r_sample]);
+            let shifted_index = index * 2;
+            unsafe { 
+                DMA_BUFFER[shifted_index] = sample; 
+                DMA_BUFFER[shifted_index + 1] = sample;
+            };
+            
+        }
+
+        // Start the DMA
+        spi_stream.ndtr.write(|w| unsafe { w.bits(2000) });
+        spi_stream.par.write(|w| w.pa().bits(0x40003C00 + 0xC));
+        spi_stream.m0ar.write(|w| unsafe { w.m0a().bits(DMA_BUFFER.as_ptr() as usize as u32) });        
+        spi_stream.cr.modify(|r, w| w.en().enabled());
+
+        // Wait for it to complete
+        while dma1.hisr.read().tcif5().bit_is_clear() {}
+
+        // Clear the flag
+        dma1.hifcr.write(|w| w.ctcif5().set_bit());
     }
 }

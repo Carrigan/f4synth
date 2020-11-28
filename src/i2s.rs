@@ -49,7 +49,7 @@ where
 {
     pub fn init(self, _freq: Hertz, _clock: Hertz) -> Self {
         // disable SS output
-        self.spi.cr2.write(|w| w.ssoe().clear_bit());
+        self.spi.cr2.write(|w| w.ssoe().clear_bit().txdmaen().enabled());
 
         // TODO: Calculate baud rate.
         // let br = match clock.0 / freq.0 {
