@@ -24,7 +24,7 @@ impl WaveGenerator for SquareWaveGenerator {
         if next_position > core::u16::MAX as u32 { next_position -= core::u16::MAX as u32 }
         self.current_position = next_position as u16;
 
-        if self.current_position < (core::u16::MAX / 2) { 0 } else { 65534 }
+        if self.current_position < (core::u16::MAX / 2) { 0 } else { 65535 }
     }
 }
 

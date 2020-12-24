@@ -15,7 +15,7 @@ impl DmaStream {
     pub fn new(dma: stm32f4xx_hal::stm32::DMA1) -> Self {
         let stream = &dma.st[5];
 
-        stream.cr.write(|w| 
+        stream.cr.write(|w|
             w
                 .chsel().bits(0)
                 .psize().bits16()
@@ -37,11 +37,11 @@ impl DmaStream {
         let stream = &self.dma.st[5];
         stream.ndtr.write(|w| unsafe { w.bits(BUFFER_SIZE as u32) });
         stream.par.write(|w| w.pa().bits(0x40003C00 + 0xC));
-        stream.m0ar.write(|w| unsafe { w.m0a().bits(DMA_BUFFER.as_ptr() as usize as u32) });        
+        stream.m0ar.write(|w| unsafe { w.m0a().bits(DMA_BUFFER.as_ptr() as usize as u32) });
         stream.cr.modify(|_r, w| w.en().enabled());
     }
 
-    pub fn block_and_fill<T: FnMut() -> u16>(&mut self, generator: &mut T) {      
+    pub fn block_and_fill<T: FnMut() -> u16>(&mut self, generator: &mut T) {
         // Advance the ping pong
         self.ping_pong = match &self.ping_pong {
             BufferHalf::FirstHalf => BufferHalf::SecondHalf,
@@ -67,17 +67,20 @@ impl DmaStream {
 
     fn fill_samples<T: FnMut() -> u16>(&mut self, generator: &mut T) {
         for index in 0..(BUFFER_SIZE / 4) {
-            let sample = generator();
+            // Shift it down to two's complement
+            let sample_i16 = ((generator() as i32) - 32768) as i16;
+            let sample_bytes: [u8; 2] = unsafe { core::mem::transmute(sample_i16) };
+            let sample = (sample_bytes[1] as u16) * 256 + (sample_bytes[0] as u16);
 
             let shifted_index = match self.ping_pong {
                 BufferHalf::FirstHalf => index * 2,
                 BufferHalf::SecondHalf => index * 2 + (BUFFER_SIZE / 2)
             };
 
-            unsafe { 
-                DMA_BUFFER[shifted_index] = sample; 
+            unsafe {
+                DMA_BUFFER[shifted_index] = sample;
                 DMA_BUFFER[shifted_index + 1] = sample;
-            };   
+            };
         }
     }
 }

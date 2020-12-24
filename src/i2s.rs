@@ -17,23 +17,23 @@ impl I2S {
     }
 
     pub fn init(spi: stm32f4xx_hal::stm32::SPI3) -> Self {
-        spi.cr2.write(|w| 
+        spi.cr2.write(|w|
             w
                 .ssoe().clear_bit()
                 .txdmaen().enabled()
         );
-    
-        spi.i2spr.write(|w| unsafe { 
+
+        spi.i2spr.write(|w| unsafe {
             w
                 .i2sdiv().bits(3)
                 .odd().odd()
-                .mckoe().enabled() 
+                .mckoe().enabled()
         });
-    
+
         spi.i2scfgr.write(|w| {
             w
                 .i2smod().i2smode()
-                .i2sstd().philips()
+                .i2sstd().msb()
                 .datlen().sixteen_bit()
                 .chlen().sixteen_bit()
                 .ckpol().idle_high()

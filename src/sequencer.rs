@@ -8,9 +8,9 @@ pub struct Sequencer<'a> {
 
 impl <'a> Sequencer <'a> {
     pub fn new(melody: Melody<'a>) -> Self {
-        Sequencer { 
-            gen: WaveGenerable::Square(SquareWaveGenerator::new(48000, 440)), 
-            melody 
+        Sequencer {
+            gen: WaveGenerable::Square(SquareWaveGenerator::new(48000, 440)),
+            melody
         }
     }
 
@@ -23,7 +23,7 @@ impl <'a> Sequencer <'a> {
             (true, Some(pitch)) => {
                 let pitchf32: f32 = pitch.into();
                 let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
-                
+
                 Some(WaveGenerable::Square(square_gen))
             },
             (true, None) => Some(WaveGenerable::Silence),

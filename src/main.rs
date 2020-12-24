@@ -52,9 +52,9 @@ fn main() -> ! {
     let config_i2c_scl = gpiob.pb6.into_alternate_af4().set_open_drain();
 
     let config_i2c = i2c::I2c::i2c1(
-        periph.I2C1, 
-        (config_i2c_scl, config_i2c_sda), 
-        400.khz(), 
+        periph.I2C1,
+        (config_i2c_scl, config_i2c_sda),
+        400.khz(),
         clocks
     );
 
@@ -85,7 +85,57 @@ fn main() -> ! {
         Note::Eighth(Pitch::B4),
         Note::Eighth(Pitch::A3),
         Note::Eighth(Pitch::C5),
-        Note::Eighth(Pitch::A3)
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::A4),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::C5),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::B4),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::C5),
+        Note::Eighth(Pitch::E5),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::A4),
+        Note::Eighth(Pitch::C5),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::B4),
+        Note::Eighth(Pitch::A3),
+        Note::Eighth(Pitch::C5),
+        Note::Eighth(Pitch::A3),
+
+        Note::Eighth(Pitch::E4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::G4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::Gb4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::G4),
+        Note::Eighth(Pitch::B4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::E4),
+        Note::Eighth(Pitch::G4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::Gb4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::G4),
+        Note::Eighth(Pitch::E3),
+
+        Note::Eighth(Pitch::E4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::G4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::Gb4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::G4),
+        Note::Eighth(Pitch::B4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::E4),
+        Note::Eighth(Pitch::G4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::Gb4),
+        Note::Eighth(Pitch::E3),
+        Note::Eighth(Pitch::G4),
+        Note::Eighth(Pitch::E3),
     ];
 
     let melody = Melody::new(&notes, 210);
@@ -94,11 +144,11 @@ fn main() -> ! {
     // Set up and start the DMA
     let mut stream = dma::DmaStream::new(periph.DMA1);
     stream.begin(&mut || sequencer.next());
-    
+
     loop {
         // Update the sequencer here with input
         sequencer.update();
-        
+
         // Fill the stream and block
         stream.block_and_fill(&mut || sequencer.next());
     }
