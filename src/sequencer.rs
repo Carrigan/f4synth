@@ -1,5 +1,5 @@
 use super::{ Melody };
-use super::waves::{ WaveGenerable, WaveGenerator, SquareWaveGenerator };
+use super::waves::{ WaveGenerable, WaveGenerator, SawtoothWaveGenerator };
 
 pub struct Sequencer<'a> {
     gen: WaveGenerable<'a>,
@@ -9,7 +9,7 @@ pub struct Sequencer<'a> {
 impl <'a> Sequencer <'a> {
     pub fn new(melody: Melody<'a>) -> Self {
         Sequencer {
-            gen: WaveGenerable::Square(SquareWaveGenerator::new(48000, 440)),
+            gen: WaveGenerable::Sawtooth(SawtoothWaveGenerator::new(48000, 440)),
             melody
         }
     }
@@ -22,9 +22,9 @@ impl <'a> Sequencer <'a> {
         let next_gen = match self.melody.next_sample() {
             (true, Some(pitch)) => {
                 let pitchf32: f32 = pitch.into();
-                let square_gen = SquareWaveGenerator::new(48000, (pitchf32) as usize);
+                let square_gen = SawtoothWaveGenerator::new(48000, (pitchf32) as usize);
 
-                Some(WaveGenerable::Square(square_gen))
+                Some(WaveGenerable::Sawtooth(square_gen))
             },
             (true, None) => Some(WaveGenerable::Silence),
             _ => None

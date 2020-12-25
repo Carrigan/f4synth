@@ -33,7 +33,7 @@ impl I2S {
         spi.i2scfgr.write(|w| {
             w
                 .i2smod().i2smode()
-                .i2sstd().msb()
+                .i2sstd().philips()
                 .datlen().sixteen_bit()
                 .chlen().sixteen_bit()
                 .ckpol().idle_high()
