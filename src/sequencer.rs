@@ -1,6 +1,9 @@
-use super::{ Melody };
-use undosa::waves::{WaveGenerator, sawtooth::SawtoothWaveGenerator};
-use undosa::mixer::Mixer;
+use undosa::{
+    waves::{WaveGenerator, sawtooth::SawtoothWaveGenerator},
+    mixer::Mixer,
+    melody::Melody
+};
+
 pub struct Sequencer<'a, T> where T: WaveGenerator {
     gen: Option<T>,
     melody: Melody<'a>

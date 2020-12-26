@@ -10,11 +10,13 @@ use sequencer::Sequencer;
 use stm32f4xx_hal::stm32::Peripherals;
 use stm32f4xx_hal::prelude::*;
 
-mod melody;
 mod i2s;
 mod dma;
 mod sequencer;
-use melody::{ Melody, Note, Pitch };
+use undosa::{
+    melody::{ Melody, Note },
+    pitch::{ Pitch }
+};
 
 #[entry]
 fn main() -> ! {
