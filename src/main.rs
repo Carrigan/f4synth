@@ -15,7 +15,9 @@ mod dma;
 mod sequencer;
 use undosa::{
     melody::{ Melody, Note },
-    pitch::{ Pitch }
+    pitch::{ Pitch },
+    waves::sawtooth::SawtoothWaveGenerator,
+    mixer::Mixer
 };
 
 #[entry]
@@ -119,18 +121,64 @@ fn main() -> ! {
         Note::Eighth(Pitch::E3),
     ];
 
+    let bass = [
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+        Note::Quarter(Pitch::A2),
+
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+        Note::Quarter(Pitch::E2),
+    ];
+
     let melody = Melody::new(&notes, 210);
     let mut sequencer = Sequencer::new(melody);
 
+    let bass_line = Melody::new(&bass, 210);
+    let mut bass_sequencer = Sequencer::new(bass_line);
+
     // Set up and start the DMA
     let mut stream = dma::DmaStream::new(periph.DMA1);
-    stream.begin(&mut || sequencer.next());
+    stream.begin(&mut || mix(&mut sequencer, &mut bass_sequencer));
 
     loop {
         // Update the sequencer here with input
         sequencer.update();
 
         // Fill the stream and block
-        stream.block_and_fill(&mut || sequencer.next());
+        stream.block_and_fill(&mut || mix(&mut sequencer, &mut bass_sequencer));
     }
+}
+
+fn mix(s1: &mut Sequencer<SawtoothWaveGenerator>, s2: &mut Sequencer<SawtoothWaveGenerator>) -> i16 {
+    Mixer::new()
+        .add(s1.next(), 127)
+        .add(s2.next(), 127)
+        .finish(255)
 }
