@@ -6,7 +6,7 @@ extern crate panic_semihosting;
 
 use cortex_m_rt::entry;
 
-use sequencer::Sequencer;
+use sequencer::{Sequencer, GeneratorType};
 use stm32f4xx_hal::stm32::Peripherals;
 use stm32f4xx_hal::prelude::*;
 
@@ -16,7 +16,6 @@ mod sequencer;
 use undosa::{
     melody::{ Melody, Note },
     pitch::{ Pitch },
-    waves::sawtooth::SawtoothWaveGenerator,
     mixer::Mixer
 };
 
@@ -158,25 +157,22 @@ fn main() -> ! {
     ];
 
     let melody = Melody::new(&notes, 210);
-    let mut sequencer = Sequencer::new(melody);
+    let mut sequencer = Sequencer::new(melody, GeneratorType::Square);
 
     let bass_line = Melody::new(&bass, 210);
-    let mut bass_sequencer = Sequencer::new(bass_line);
+    let mut bass_sequencer = Sequencer::new(bass_line, GeneratorType::Sawtooth);
 
     // Set up and start the DMA
     let mut stream = dma::DmaStream::new(periph.DMA1);
     stream.begin(&mut || mix(&mut sequencer, &mut bass_sequencer));
 
     loop {
-        // Update the sequencer here with input
-        sequencer.update();
-
         // Fill the stream and block
         stream.block_and_fill(&mut || mix(&mut sequencer, &mut bass_sequencer));
     }
 }
 
-fn mix(s1: &mut Sequencer<SawtoothWaveGenerator>, s2: &mut Sequencer<SawtoothWaveGenerator>) -> i16 {
+fn mix(s1: &mut Sequencer, s2: &mut Sequencer) -> i16 {
     Mixer::new()
         .add(s1.next(), 127)
         .add(s2.next(), 127)
