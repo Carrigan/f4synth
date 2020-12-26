@@ -31,7 +31,7 @@ impl DmaStream {
         DmaStream { dma, ping_pong: BufferHalf::FirstHalf }
     }
 
-    pub fn begin<T: FnMut() -> u16>(&mut self, generator: &mut T) {
+    pub fn begin<T: FnMut() -> i16>(&mut self, generator: &mut T) {
         self.fill_samples(generator);
 
         let stream = &self.dma.st[5];
@@ -41,7 +41,7 @@ impl DmaStream {
         stream.cr.modify(|_r, w| w.en().enabled());
     }
 
-    pub fn block_and_fill<T: FnMut() -> u16>(&mut self, generator: &mut T) {
+    pub fn block_and_fill<T: FnMut() -> i16>(&mut self, generator: &mut T) {
         // Advance the ping pong
         self.ping_pong = match &self.ping_pong {
             BufferHalf::FirstHalf => BufferHalf::SecondHalf,
@@ -65,10 +65,10 @@ impl DmaStream {
         };
     }
 
-    fn fill_samples<T: FnMut() -> u16>(&mut self, generator: &mut T) {
+    fn fill_samples<T: FnMut() -> i16>(&mut self, generator: &mut T) {
         for index in 0..(BUFFER_SIZE / 4) {
             // Shift it down to two's complement
-            let sample_i16 = ((generator() as i32) - 32768) as i16;
+            let sample_i16 = generator();
             let sample_bytes: [u8; 2] = unsafe { core::mem::transmute(sample_i16) };
             let sample = (sample_bytes[1] as u16) * 256 + (sample_bytes[0] as u16);
 

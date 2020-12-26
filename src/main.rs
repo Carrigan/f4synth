@@ -1,5 +1,5 @@
 #![no_main]
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 #[cfg(debug_assertions)]
 extern crate panic_semihosting;
@@ -10,12 +10,10 @@ use sequencer::Sequencer;
 use stm32f4xx_hal::stm32::Peripherals;
 use stm32f4xx_hal::prelude::*;
 
-mod waves;
 mod melody;
 mod i2s;
 mod dma;
 mod sequencer;
-
 use melody::{ Melody, Note, Pitch };
 
 #[entry]

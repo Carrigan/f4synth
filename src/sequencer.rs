@@ -1,15 +1,15 @@
 use super::{ Melody };
-use super::waves::{ WaveGenerable, WaveGenerator, SawtoothWaveGenerator };
-
-pub struct Sequencer<'a> {
-    gen: WaveGenerable<'a>,
+use undosa::waves::{WaveGenerator, sawtooth::SawtoothWaveGenerator};
+use undosa::mixer::Mixer;
+pub struct Sequencer<'a, T> where T: WaveGenerator {
+    gen: Option<T>,
     melody: Melody<'a>
 }
 
-impl <'a> Sequencer <'a> {
+impl <'a> Sequencer <'a, SawtoothWaveGenerator> {
     pub fn new(melody: Melody<'a>) -> Self {
         Sequencer {
-            gen: WaveGenerable::Sawtooth(SawtoothWaveGenerator::new(48000, 440)),
+            gen: None,
             melody
         }
     }
@@ -18,19 +18,30 @@ impl <'a> Sequencer <'a> {
         // TODO
     }
 
-    pub fn next(&mut self) -> u16 {
-        let next_gen = match self.melody.next_sample() {
+    pub fn next(&mut self) -> i16 {
+        let pitch_update = match self.melody.next_sample() {
             (true, Some(pitch)) => {
                 let pitchf32: f32 = pitch.into();
-                let square_gen = SawtoothWaveGenerator::new(48000, (pitchf32) as usize);
+                let generator = SawtoothWaveGenerator::new(
+                    48000,
+                    (pitchf32) as usize
+                );
 
-                Some(WaveGenerable::Sawtooth(square_gen))
+                Some(Some(generator))
             },
-            (true, None) => Some(WaveGenerable::Silence),
+            (true, None) => Some(None),
             _ => None
         };
 
-        if let Some(generator) = next_gen { self.gen = generator };
-        self.gen.next()
+        if let Some(generator) = pitch_update { self.gen = generator };
+
+        let next_sample_raw = match &mut self.gen {
+            Some(generator) => generator.next().unwrap(),
+            None => 0
+        };
+
+        Mixer::new()
+            .add(next_sample_raw, 255)
+            .finish(64)
     }
 }
