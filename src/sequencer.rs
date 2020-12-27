@@ -1,4 +1,4 @@
-use undosa::{melody::Melody, mixer::Mixer, waves::{sawtooth::SawtoothWaveGenerator, square::SquareWaveGenerator}};
+use undosa::{melody::Melody, mixer::Mixer, pitch::Pitch, waves::{sawtooth::SawtoothWaveGenerator, square::SquareWaveGenerator}};
 
 enum Generator {
     Square(SquareWaveGenerator),
@@ -53,19 +53,28 @@ impl <'a> Sequencer <'a> {
     }
 
     pub fn next(&mut self) -> i16 {
-        let pitch_update = match self.melody.next_sample() {
-            (true, Some(pitch)) => {
-                let pitchf32: f32 = pitch.into();
-                Some(Some(Generator::build(&self.gen_type, pitchf32)))
+        let new_generator = match self.melody.next_note() {
+            Some(note) => {
+                let pitch_option: Option<Pitch> = note.into();
+
+                match pitch_option {
+                    Some(pitch) => {
+                        let pitchf32: f32 = pitch.into();
+                        Some(Generator::build(&self.gen_type, pitchf32))
+                    }
+                    None => None
+                }
             },
-            (true, None) => Some(None),
             _ => None
         };
 
-        if let Some(generator) = pitch_update { self.gen = generator };
+        if let Some(generator) = new_generator { self.gen = Some(generator) };
 
         let next_sample_raw = match &mut self.gen {
-            Some(generator) => generator.next().unwrap(),
+            Some(generator) => match generator.next() {
+                Some(sample) => sample,
+                None => 0
+            }
             None => 0
         };
 

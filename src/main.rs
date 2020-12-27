@@ -14,9 +14,10 @@ mod i2s;
 mod dma;
 mod sequencer;
 use undosa::{
-    melody::{ Melody, Note },
+    melody::{ Melody },
     pitch::{ Pitch },
-    mixer::Mixer
+    mixer::Mixer,
+    note::Note
 };
 
 #[entry]
