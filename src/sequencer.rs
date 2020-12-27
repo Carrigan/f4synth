@@ -1,6 +1,6 @@
 use core::iter::Take;
 
-use undosa::{melody::Melody, mixer::Mixer, pitch::Pitch, waves::{WaveGenerator, sawtooth::SawtoothWaveGenerator, square::SquareWaveGenerator}};
+use undosa::{quantize::Quantizable, melody::Melody, mixer::Mixer, pitch::Pitch, waves::{WaveGenerator, sawtooth::SawtoothWaveGenerator, square::SquareWaveGenerator}};
 
 enum Generator {
     Square(SquareWaveGenerator),
@@ -69,10 +69,10 @@ impl <'a> Sequencer <'a> {
                 match pitch_option {
                     Some(pitch) => {
                         let pitchf32: f32 = pitch.into();
-                        let generator = Generator::build(&self.gen_type, pitchf32);
-                        let quantized_generator = undosa::quantize::quantize(generator, self.melody.tempo, note.duration(), 127);
+                        let generator = Generator::build(&self.gen_type, pitchf32)
+                            .quantize(self.melody.tempo, note.duration(), 127);
 
-                        Some(quantized_generator)
+                        Some(generator)
                     }
                     None => None
                 }
