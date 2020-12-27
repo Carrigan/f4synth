@@ -1,4 +1,6 @@
-use undosa::{melody::Melody, mixer::Mixer, pitch::Pitch, waves::{sawtooth::SawtoothWaveGenerator, square::SquareWaveGenerator}};
+use core::iter::Take;
+
+use undosa::{melody::Melody, mixer::Mixer, pitch::Pitch, waves::{WaveGenerator, sawtooth::SawtoothWaveGenerator, square::SquareWaveGenerator}};
 
 enum Generator {
     Square(SquareWaveGenerator),
@@ -23,14 +25,21 @@ impl Generator {
         }
 
     }
+}
 
-    fn next(&mut self) -> Option<i16> {
+impl Iterator for Generator {
+    type Item = i16;
+
+    fn next(&mut self) -> Option<Self::Item> {
         match self {
             Generator::Square(gen) => gen.next(),
             Generator::Sawtooth(gen) => gen.next()
         }
     }
 }
+
+impl ExactSizeIterator for Generator { }
+impl WaveGenerator for Generator { }
 
 pub enum GeneratorType {
     Square,
@@ -39,7 +48,7 @@ pub enum GeneratorType {
 
 pub struct Sequencer<'a> {
     gen_type: GeneratorType,
-    gen: Option<Generator>,
+    gen: Option<Take<Generator>>,
     melody: Melody<'a>
 }
 
@@ -60,7 +69,10 @@ impl <'a> Sequencer <'a> {
                 match pitch_option {
                     Some(pitch) => {
                         let pitchf32: f32 = pitch.into();
-                        Some(Generator::build(&self.gen_type, pitchf32))
+                        let generator = Generator::build(&self.gen_type, pitchf32);
+                        let quantized_generator = undosa::quantize::quantize(generator, self.melody.tempo, note.duration(), 127);
+
+                        Some(quantized_generator)
                     }
                     None => None
                 }
