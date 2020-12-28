@@ -1,8 +1,7 @@
 #![no_main]
 #![cfg_attr(not(test), no_std)]
 
-#[cfg(debug_assertions)]
-extern crate panic_semihosting;
+extern crate panic_halt;
 
 use cortex_m_rt::entry;
 
@@ -158,10 +157,10 @@ fn main() -> ! {
     ];
 
     let melody = Melody::new(&notes, 210);
-    let mut sequencer = Sequencer::new(melody, GeneratorType::Square);
+    let mut sequencer = Sequencer::new(melody, GeneratorType::Square, 60, 60, 127, 10);
 
     let bass_line = Melody::new(&bass, 210);
-    let mut bass_sequencer = Sequencer::new(bass_line, GeneratorType::Sawtooth);
+    let mut bass_sequencer = Sequencer::new(bass_line, GeneratorType::Sawtooth, 10, 60, 200, 20);
 
     // Set up and start the DMA
     let mut stream = dma::DmaStream::new(periph.DMA1);
@@ -175,7 +174,7 @@ fn main() -> ! {
 
 fn mix(s1: &mut Sequencer, s2: &mut Sequencer) -> i16 {
     Mixer::new()
-        .add(s1.next(), 127)
-        .add(s2.next(), 127)
-        .finish(255)
+        .add(s1.next(), 140)
+        .add(s2.next(), 110)
+        .finish(100)
 }

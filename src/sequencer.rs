@@ -1,6 +1,5 @@
+use undosa::{quantize::Quantizable, envelope::{Enveloped, AdsrEnvelope}, melody::Melody, mixer::Mixer, pitch::Pitch, waves::{WaveGenerator, sawtooth::SawtoothWaveGenerator, square::SquareWaveGenerator}};
 use core::iter::Take;
-
-use undosa::{quantize::Quantizable, melody::Melody, mixer::Mixer, pitch::Pitch, waves::{WaveGenerator, sawtooth::SawtoothWaveGenerator, square::SquareWaveGenerator}};
 
 enum Generator {
     Square(SquareWaveGenerator),
@@ -48,16 +47,24 @@ pub enum GeneratorType {
 
 pub struct Sequencer<'a> {
     gen_type: GeneratorType,
-    gen: Option<Take<Generator>>,
-    melody: Melody<'a>
+    gen: Option<AdsrEnvelope<Take<Generator>>>,
+    melody: Melody<'a>,
+    attack: u8,
+    decay: u8,
+    sustain: u8,
+    release: u8
 }
 
 impl <'a> Sequencer <'a> {
-    pub fn new(melody: Melody<'a>, gen_type: GeneratorType) -> Self {
+    pub fn new(melody: Melody<'a>, gen_type: GeneratorType, attack: u8, decay: u8, sustain: u8, release: u8) -> Self {
         Sequencer {
             gen_type,
             gen: None,
-            melody
+            melody,
+            attack,
+            decay,
+            sustain,
+            release
         }
     }
 
@@ -70,7 +77,8 @@ impl <'a> Sequencer <'a> {
                     Some(pitch) => {
                         let pitchf32: f32 = pitch.into();
                         let generator = Generator::build(&self.gen_type, pitchf32)
-                            .quantize(self.melody.tempo, note.duration(), 127);
+                            .quantize(self.melody.tempo, note.duration(), 220)
+                            .envelope(self.attack, self.decay, self.sustain, self.release);
 
                         Some(generator)
                     }
@@ -90,8 +98,6 @@ impl <'a> Sequencer <'a> {
             None => 0
         };
 
-        Mixer::new()
-            .add(next_sample_raw, 255)
-            .finish(64)
+        next_sample_raw
     }
 }

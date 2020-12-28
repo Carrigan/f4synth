@@ -7,7 +7,7 @@
         {
             "name": "Cortex Debug",
             "cwd": "${workspaceRoot}",
-            "executable": "./target/thumbv7em-none-eabihf/debug/f4synth",
+            "executable": "./target/thumbv7em-none-eabihf/release/f4synth",
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
